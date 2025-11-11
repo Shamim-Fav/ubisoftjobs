@@ -1,125 +1,125 @@
-import streamlit as st
 import requests
 import pandas as pd
-import json
+import streamlit as st
 import time
-from io import BytesIO
 
 # ================== CONFIG ==================
-st.set_page_config(page_title="Ubisoft Job Scraper", layout="centered")
-st.title("🎮 Ubisoft Job Scraper")
-
-ALGOLIA_URL = (
-    "https://avcvysejs1-2.algolianet.com/1/indexes/*/queries"
-    "?x-algolia-agent=Algolia%20for%20JavaScript%20(4.8.4)%3B%20Browser%20(lite)%3B%20JS%20Helper%20(3.11.0)%3B%20react%20(16.12.0)%3B%20react-instantsearch%20(6.8.3)"
-    "&x-algolia-api-key=d2ec5782c4eb549092cfa4ed5062599a"
-    "&x-algolia-application-id=AVCVYSEJS1"
-)
-
+URL = "https://avcvysejs1-2.algolianet.com/1/indexes/*/queries"
 HEADERS = {
     "accept": "*/*",
-    "content-type": "application/x-www-form-urlencoded",
+    "content-type": "application/json",
     "origin": "https://www.ubisoft.com",
     "referer": "https://www.ubisoft.com/",
-    "user-agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/142.0.0.0 Safari/537.36",
+    "user-agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/142.0.0.0 Safari/537.36"
 }
+ALGOLIA_APP_ID = "AVCVYSEJS1"
+ALGOLIA_API_KEY = "d2ec5782c4eb549092cfa4ed5062599a"
+
+HITS_PER_PAGE = 50
 
 # ================== FUNCTIONS ==================
-@st.cache_data(ttl=3600)
-def get_available_countries():
-    """Fetch available country codes and counts from Ubisoft jobs API."""
-    payload = {
-        "requests": [
-            {
-                "indexName": "jobs_en-us_default",
-                "params": "facets=countryCode&hitsPerPage=0"
-            }
-        ]
+def fetch_jobs(country_code, keyword=None):
+    """Fetch jobs from Ubisoft Algolia API with optional keyword."""
+    jobs = []
+    page = 0
+    while True:
+        # Build request payload
+        payload = {
+            "requests": [
+                {
+                    "indexName": "jobs_en-us_default",
+                    "params": (
+                        f"facetFilters=[['countryCode:{country_code}']]&"
+                        f"facets=[jobFamily,team,countryCode,cities,contractType,workFlexibility,graduateProgram]&"
+                        f"hitsPerPage={HITS_PER_PAGE}&page={page}&query={keyword or ''}"
+                    )
+                }
+            ]
+        }
+        # Send POST request
+        try:
+            resp = requests.post(
+                URL,
+                headers=HEADERS,
+                params={
+                    "x-algolia-agent": "Algolia for JavaScript (4.8.4); Browser (lite); JS Helper (3.11.0); react (16.12.0); react-instantsearch (6.8.3)",
+                    "x-algolia-api-key": ALGOLIA_API_KEY,
+                    "x-algolia-application-id": ALGOLIA_APP_ID
+                },
+                json=payload,
+                timeout=30
+            )
+            resp.raise_for_status()
+            data = resp.json()
+        except Exception as e:
+            st.error(f"Error fetching page {page}: {e}")
+            break
+
+        hits = data.get("results", [])[0].get("hits", [])
+        if not hits:
+            break
+        
+        jobs.extend(hits)
+        st.progress(min((page + 1) / 10, 1.0))  # approximate progress
+        page += 1
+
+    return jobs
+
+def extract_job_data(job):
+    """Extract relevant fields from a job entry."""
+    return {
+        "title": job.get("title"),
+        "country": job.get("countryCode"),
+        "city": ", ".join(job.get("cities", [])),
+        "team": job.get("team"),
+        "jobFamily": job.get("jobFamily"),
+        "contractType": job.get("contractType"),
+        "workFlexibility": job.get("workFlexibility"),
+        "graduateProgram": job.get("graduateProgram"),
+        "experienceLevel": job.get("experienceLevel"),
+        "link": job.get("link"),
+        "description": job.get("description"),
+        "additionalInformation": job.get("additionalInformation"),
+        "qualifications": job.get("qualifications")
     }
-    resp = requests.post(ALGOLIA_URL, headers=HEADERS, data=json.dumps(payload))
-    data = resp.json()
-    facets = data["results"][0]["facets"]["countryCode"]
-    countries = {k: v for k, v in sorted(facets.items(), key=lambda x: -x[1])}
-    return countries
 
+# ================== STREAMLIT UI ==================
+st.set_page_config(page_title="Ubisoft Job Scraper", layout="wide")
+st.title("🎮 Ubisoft Job Scraper")
 
-def fetch_jobs(country_code=None, keyword=None, page=0, hits_per_page=10):
-    """Fetch jobs for one country and keyword."""
-    filters = ""
-    if country_code:
-        filters = f"&facetFilters=[['countryCode:{country_code}']]"
-    if keyword is None:
-        keyword = ""
-    params = f"hitsPerPage={hits_per_page}&page={page}&query={keyword}{filters}"
-
-    payload = {"requests": [{"indexName": "jobs_en-us_default", "params": params}]}
-    resp = requests.post(ALGOLIA_URL, headers=HEADERS, data=json.dumps(payload))
-    data = resp.json()
-    results = data.get("results", [])
-    if not results:
-        return []
-    return results[0].get("hits", [])
-
-
-def extract_all_jobs(countries, keyword):
-    """Fetch all jobs for selected countries."""
-    all_jobs = []
-    progress = st.progress(0)
-    total = len(countries)
-
-    for i, code in enumerate(countries):
-        st.write(f"Fetching jobs for **{code.upper()}**...")
-        page = 0
-        while True:
-            jobs = fetch_jobs(country_code=code, keyword=keyword, page=page)
-            if not jobs:
-                break
-            all_jobs.extend(jobs)
-            if len(jobs) < 10:
-                break
-            page += 1
-            time.sleep(0.5)
-        progress.progress((i + 1) / total)
-    progress.empty()
-    return all_jobs
-
-
-# ================== UI INPUTS ==================
-countries_dict = get_available_countries()
-country_options = list(countries_dict.keys())
-
-keyword = st.text_input("🔍 Enter job title keyword (or leave blank for all):", "")
-selected_countries = st.multiselect(
-    "🌍 Select countries to scrape:",
-    options=country_options,
-    default=country_options,
-    format_func=lambda x: f"{x.upper()} ({countries_dict[x]} jobs)"
+# Inputs
+countries_input = st.text_input(
+    "Enter country codes (comma-separated) or 'all'",
+    value="ca"
+)
+keyword_input = st.text_input(
+    "Enter job keyword (leave blank for all jobs)"
 )
 
-# ================== SCRAPE ==================
-if st.button("🚀 Start Scraping"):
-    if not selected_countries:
-        st.warning("Please select at least one country.")
-        st.stop()
+if st.button("Fetch Jobs"):
+    country_codes = [c.strip().lower() for c in countries_input.split(",")] if countries_input.lower() != "all" else [
+        "ca","fr","cn","ua","de","gb","ro","vn","ph","es","in","br","it","sg","us"
+    ]
+    
+    all_jobs = []
+    for code in country_codes:
+        st.info(f"Fetching jobs for {code.upper()}...")
+        jobs = fetch_jobs(code, keyword_input)
+        if jobs:
+            st.success(f"✅ Fetched {len(jobs)} jobs from {code.upper()}")
+            all_jobs.extend([extract_job_data(j) for j in jobs])
+        else:
+            st.warning(f"No jobs found for {code.upper()}")
 
-    with st.spinner("Scraping Ubisoft jobs..."):
-        jobs = extract_all_jobs(selected_countries, keyword.strip() or None)
+    if all_jobs:
+        df = pd.DataFrame(all_jobs)
+        st.write(f"Total jobs fetched: {len(df)}")
+        st.dataframe(df)
 
-    if jobs:
-        df = pd.DataFrame(jobs)
-        st.success(f"✅ Scraped {len(df)} jobs from Ubisoft.")
-        st.dataframe(df.head(20))
-
-        # Save to Excel
-        output = BytesIO()
-        with pd.ExcelWriter(output, engine="openpyxl") as writer:
-            df.to_excel(writer, index=False, sheet_name="Ubisoft_Jobs")
-
-        st.download_button(
-            label="📥 Download Excel file",
-            data=output.getvalue(),
-            file_name="ubisoft_jobs.xlsx",
-            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        )
+        # Excel download
+        excel_file = "ubisoft_jobs.xlsx"
+        df.to_excel(excel_file, index=False)
+        with open(excel_file, "rb") as f:
+            st.download_button("📥 Download Excel", f, file_name=excel_file)
     else:
         st.warning("No jobs found for the selected filters.")
