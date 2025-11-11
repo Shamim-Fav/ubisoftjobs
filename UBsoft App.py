@@ -59,7 +59,7 @@ def fetch_jobs(country_code, keyword=None):
     return jobs
 
 # ================== STREAMLIT UI ==================
-st.set_page_config(page_title="LVMH Job Scraper", layout="wide")
+st.set_page_config(page_title="LVMH Job Scraper", layout="centered")
 st.title("🎮 Ubisoft Job Scraper")
 
 # Country selection
@@ -101,3 +101,4 @@ if st.button("Fetch Jobs"):
             )
     else:
         st.warning("No jobs found for the selected filters.")
+
