@@ -24,11 +24,10 @@ HEADERS = {
     "user-agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/142.0.0.0 Safari/537.36",
 }
 
-
 # ================== FUNCTIONS ==================
 @st.cache_data(ttl=3600)
 def get_available_countries():
-    """Fetch list of available country codes with job counts."""
+    """Fetch available country codes and counts from Ubisoft jobs API."""
     payload = {
         "requests": [
             {
@@ -37,14 +36,14 @@ def get_available_countries():
             }
         ]
     }
-    resp = requests.post(ALGOLIA_URL, headers=HEADERS, json=payload)
+    resp = requests.post(ALGOLIA_URL, headers=HEADERS, data=json.dumps(payload))
     data = resp.json()
     facets = data["results"][0]["facets"]["countryCode"]
     countries = {k: v for k, v in sorted(facets.items(), key=lambda x: -x[1])}
     return countries
 
 
-def fetch_jobs(country_code=None, keyword=None, page=0, hits_per_page=50):
+def fetch_jobs(country_code=None, keyword=None, page=0, hits_per_page=10):
     """Fetch jobs for one country and keyword."""
     filters = ""
     if country_code:
@@ -54,7 +53,7 @@ def fetch_jobs(country_code=None, keyword=None, page=0, hits_per_page=50):
     params = f"hitsPerPage={hits_per_page}&page={page}&query={keyword}{filters}"
 
     payload = {"requests": [{"indexName": "jobs_en-us_default", "params": params}]}
-    resp = requests.post(ALGOLIA_URL, headers=HEADERS, json=payload)
+    resp = requests.post(ALGOLIA_URL, headers=HEADERS, data=json.dumps(payload))
     data = resp.json()
     results = data.get("results", [])
     if not results:
@@ -63,7 +62,7 @@ def fetch_jobs(country_code=None, keyword=None, page=0, hits_per_page=50):
 
 
 def extract_all_jobs(countries, keyword):
-    """Loop through selected countries, fetch all jobs."""
+    """Fetch all jobs for selected countries."""
     all_jobs = []
     progress = st.progress(0)
     total = len(countries)
@@ -76,13 +75,11 @@ def extract_all_jobs(countries, keyword):
             if not jobs:
                 break
             all_jobs.extend(jobs)
-            if len(jobs) < 50:
+            if len(jobs) < 10:
                 break
             page += 1
             time.sleep(0.5)
-
         progress.progress((i + 1) / total)
-
     progress.empty()
     return all_jobs
 
@@ -99,7 +96,8 @@ selected_countries = st.multiselect(
     format_func=lambda x: f"{x.upper()} ({countries_dict[x]} jobs)"
 )
 
-if st.button("Start Scraping"):
+# ================== SCRAPE ==================
+if st.button("🚀 Start Scraping"):
     if not selected_countries:
         st.warning("Please select at least one country.")
         st.stop()
@@ -116,6 +114,7 @@ if st.button("Start Scraping"):
         output = BytesIO()
         with pd.ExcelWriter(output, engine="openpyxl") as writer:
             df.to_excel(writer, index=False, sheet_name="Ubisoft_Jobs")
+
         st.download_button(
             label="📥 Download Excel file",
             data=output.getvalue(),
