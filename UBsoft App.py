@@ -4,7 +4,10 @@ import pandas as pd
 import json
 import time
 import re 
-from io import StringIO # <-- Added for CSV conversion
+from io import StringIO # Added for CSV conversion
+
+# The UTF-8 Byte Order Mark (BOM) for correct encoding recognition by Excel/other readers
+BOM = u'\ufeff' 
 
 # ================== CONFIG ==================
 URL = (
@@ -111,10 +114,11 @@ def fetch_jobs(country_code, keyword=None):
 
     return jobs
 
-# Function to convert DataFrame to CSV STRING
+# Function to convert DataFrame to CSV STRING with BOM
 def to_csv_string(df):
-    # Use StringIO to capture the CSV output in memory
     csv_buffer = StringIO()
+    # WRITE THE BOM CHARACTER FOR UTF-8 RECOGNITION
+    csv_buffer.write(BOM) 
     df.to_csv(csv_buffer, index=False)
     return csv_buffer.getvalue()
 
@@ -188,25 +192,25 @@ if st.button("Fetch Jobs"):
         filtered_cols_to_select = [col for col in FILTERED_COLUMN_ORDER if col in df.columns]
         df_filtered = df.reindex(columns=filtered_cols_to_select)
         
-        # Convert to CSV string
+        # Convert to CSV string with BOM
         filtered_csv_data = to_csv_string(df_filtered)
         
         st.download_button(
             label="📥 Download Filtered Data (CSV)",
             data=filtered_csv_data,
-            file_name="ubisoft_jobs_filtered.csv", # <-- CHANGED TO CSV
-            mime="text/csv" # <-- CHANGED MIME TYPE
+            file_name="ubisoft_jobs_filtered.csv", 
+            mime="text/csv" 
         )
         
         # 4. FULL DATA DOWNLOAD (CSV)
-        # Convert to CSV string
+        # Convert to CSV string with BOM
         full_csv_data = to_csv_string(df)
         
         st.download_button(
             label="⬇️ Download FULL Data (CSV)",
             data=full_csv_data,
-            file_name="ubisoft_jobs_full.csv", # <-- CHANGED TO CSV
-            mime="text/csv" # <-- CHANGED MIME TYPE
+            file_name="ubisoft_jobs_full.csv", 
+            mime="text/csv" 
         )
 
     else:
