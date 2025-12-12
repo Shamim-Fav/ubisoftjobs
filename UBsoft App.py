@@ -3,6 +3,8 @@ import requests
 import pandas as pd
 import json
 import time
+import re 
+from io import StringIO # <-- Added for CSV conversion
 
 # ================== CONFIG ==================
 URL = (
@@ -51,35 +53,28 @@ FILTERED_COLUMN_ORDER = [
     "Name", "Slug", "Collection ID", "Locale ID", "Item ID", "Archived", "Draft", 
     "Created On", "Updated On", "Published On", "CMS ID", "Company", "Type", 
     "Description", "Salary Range", "Access", "Location", "Industry", "Level", 
-    "Salary", "Deadline", "Apply URL"
+    "Salary", "Deadline", "Apply URL" 
 ]
-
 
 # ================== FUNCTIONS ==================
 
 # Helper function to generate the slug
 def generate_slug(row):
-    # 1. Company Name (Fixed)
+    name_str = str(row['Name'])
+    location_str = str(row['Location'])
+    
     company_part = FIXED_COMPANY_NAME
     
-    # 2. Job Title (Name) - Take first two words
-    # Split the job title by space, take the first two elements, and join them
-    title_words = row['Name'].split()
+    # Job Title (Name) - Take first two words
+    title_words = name_str.split()
     title_part = ' '.join(title_words[:2])
     
-    # 3. Location
-    location_part = str(row['Location'])
+    location_part = location_str
     
-    # Combine the parts, convert to lowercase, and replace spaces/non-alphanumeric with hyphens
-    slug_parts = [company_part, title_part, location_part]
+    # Combine the parts
+    full_slug = f"{company_part} {title_part} {location_part}"
     
-    # Clean up the parts for slug format (lowercase, replace non-word chars with hyphen)
-    
-    # A simple cleaning approach: replace spaces with hyphens, then remove multiple hyphens, then lowercase
-    full_slug = '-'.join(slug_parts)
-    
-    # Simple cleaner: convert to lowercase and replace sequences of non-alphanumeric chars with single hyphen
-    import re
+    # Clean up: replace sequences of non-alphanumeric chars with a single hyphen, lowercase, and strip leading/trailing hyphens
     cleaned_slug = re.sub(r'[^a-zA-Z0-9]+', '-', full_slug).strip('-').lower()
     
     return cleaned_slug
@@ -116,13 +111,12 @@ def fetch_jobs(country_code, keyword=None):
 
     return jobs
 
-# Function to convert DataFrame to Excel
-def to_excel_bytes(df):
-    from io import BytesIO
-    with pd.ExcelWriter(BytesIO(), engine='xlsxwriter') as writer:
-        df.to_excel(writer, index=False, sheet_name='Jobs')
-        processed_data = writer.book.filename.getvalue() # Get value from BytesIO object used by ExcelWriter
-    return processed_data
+# Function to convert DataFrame to CSV STRING
+def to_csv_string(df):
+    # Use StringIO to capture the CSV output in memory
+    csv_buffer = StringIO()
+    df.to_csv(csv_buffer, index=False)
+    return csv_buffer.getvalue()
 
 # ================== STREAMLIT UI ==================
 st.set_page_config(page_title="Ubisoft Job Scraper", layout="centered")
@@ -154,7 +148,6 @@ if st.button("Fetch Jobs"):
         df = pd.DataFrame(all_jobs)
 
         # 1. COLUMN MODIFICATIONS
-        # API Field Renaming Map
         rename_map = {
             'title': 'Name',
             'contractType': 'Type',
@@ -164,25 +157,22 @@ if st.button("Fetch Jobs"):
             'url': 'Apply URL' 
         }
         
-        # Apply Renaming
         df = df.rename(columns=rename_map)
         
-        # Delete original 'slug' column
         if 'slug' in df.columns:
             df = df.drop(columns=['slug'])
 
         # 2. CALCULATE and ADD NEW COLUMNS
         
-        # Add FIXED 'Company' column
         df['Company'] = FIXED_COMPANY_NAME
         
-        # Add CALCULATED 'Slug' column
-        df['Slug'] = df.apply(generate_slug, axis=1)
-
         # Add remaining BLANK columns
         for col, default_val in BLANK_COLUMNS_DEFAULTS.items():
             if col not in df.columns:
                  df[col] = default_val
+
+        # Add CALCULATED 'Slug' column
+        df['Slug'] = df.apply(generate_slug, axis=1)
 
         st.write(f"Total jobs fetched: {len(all_jobs)}")
         
@@ -192,29 +182,31 @@ if st.button("Fetch Jobs"):
         df_display = df[[col for col in display_columns if col in df.columns]]
         st.dataframe(df_display)
         
-        # --- DUAL DOWNLOAD BUTTONS ---
+        # --- DUAL DOWNLOAD BUTTONS (CSV) ---
         
-        # 3. FILTERED DATA DOWNLOAD: Select and order columns exactly as requested
+        # 3. FILTERED DATA DOWNLOAD (CSV)
         filtered_cols_to_select = [col for col in FILTERED_COLUMN_ORDER if col in df.columns]
-
-        df_filtered = df[filtered_cols_to_select]
-        filtered_excel_data = to_excel_bytes(df_filtered)
+        df_filtered = df.reindex(columns=filtered_cols_to_select)
+        
+        # Convert to CSV string
+        filtered_csv_data = to_csv_string(df_filtered)
         
         st.download_button(
-            label="📥 Download Filtered Data (xlsx)",
-            data=filtered_excel_data,
-            file_name="ubisoft_jobs_filtered.xlsx",
-            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+            label="📥 Download Filtered Data (CSV)",
+            data=filtered_csv_data,
+            file_name="ubisoft_jobs_filtered.csv", # <-- CHANGED TO CSV
+            mime="text/csv" # <-- CHANGED MIME TYPE
         )
         
-        # 4. FULL DATA DOWNLOAD
-        full_excel_data = to_excel_bytes(df)
+        # 4. FULL DATA DOWNLOAD (CSV)
+        # Convert to CSV string
+        full_csv_data = to_csv_string(df)
         
         st.download_button(
-            label="⬇️ Download FULL Data (xlsx)",
-            data=full_excel_data,
-            file_name="ubisoft_jobs_full.xlsx",
-            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+            label="⬇️ Download FULL Data (CSV)",
+            data=full_csv_data,
+            file_name="ubisoft_jobs_full.csv", # <-- CHANGED TO CSV
+            mime="text/csv" # <-- CHANGED MIME TYPE
         )
 
     else:
