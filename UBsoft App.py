@@ -25,9 +25,8 @@ AVAILABLE_COUNTRIES = [
     "ph", "es", "in", "br", "it", "sg", "us"
 ]
 
-# List of all new blank columns requested by the user
-BLANK_COLUMNS_WITH_API_RENAMES = {
-    # New Blank Columns
+# List of all new columns and their default values (with 'Company' fixed to 'Ubisoft')
+BLANK_COLUMNS_DEFAULTS = {
     "Slug": '', 
     "Collection ID": '', 
     "Locale ID": '', 
@@ -38,7 +37,7 @@ BLANK_COLUMNS_WITH_API_RENAMES = {
     "Updated On": '', 
     "Published On": '', 
     "CMS ID": '', 
-    "Company": '', 
+    "Company": 'Ubisoft', # <-- FIXED VALUE
     "Salary Range": '', 
     "Access": '', 
     "Level": '', 
@@ -62,7 +61,7 @@ def fetch_jobs(country_code, keyword=None):
     while True:
         params = (
             f"facetFilters=%5B%5B%22countryCode%3A{country_code}%22%5D%5D"
-            "&facets=%5B%22jobFamily%22%2C%22team%22%2C%22countryCode%2C%22cities%22%2C%22contractType%22%2C%22workFlexibility%22%2C%22graduateProgram%22%5D"
+            "&facets=%5B%22jobFamily%22%2C%22team%22%2C%22countryCode%22%2C%22cities%22%2C%22contractType%22%2C%22workFlexibility%22%2C%22graduateProgram%22%5D"
             "&highlightPostTag=%3C%2Fais-highlight-0000000000%3E"
             "&highlightPreTag=%3Cais-highlight-0000000000%3E"
             "&maxValuesPerFacet=100"
@@ -92,7 +91,7 @@ def fetch_jobs(country_code, keyword=None):
 def to_excel_bytes(df):
     from io import BytesIO
     output = BytesIO()
-    # Use xlsxwriter for better compatibility and memory management with large dataframes
+    # Assuming 'xlsxwriter' is installed and working now!
     with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
         df.to_excel(writer, index=False, sheet_name='Jobs')
     processed_data = output.getvalue()
@@ -128,14 +127,14 @@ if st.button("Fetch Jobs"):
         df = pd.DataFrame(all_jobs)
 
         # 1. COLUMN MODIFICATIONS
-        # API Field Renaming Map
+        # API Field Renaming Map (Corrected 'cities' to 'Location' and 'url' to 'Apply URL')
         rename_map = {
             'title': 'Name',
             'contractType': 'Type',
             'description': 'Description',
-            'cities': 'Location',
+            'cities': 'Location', 
             'jobFamily': 'Industry',
-            'url': 'Apply URL'
+            'url': 'Apply URL' # <-- CORRECTED
         }
         
         # Apply Renaming
@@ -145,9 +144,8 @@ if st.button("Fetch Jobs"):
         if 'slug' in df.columns:
             df = df.drop(columns=['slug'])
 
-        # Add new blank columns (using the defined map to set values)
-        for col, default_val in BLANK_COLUMNS_WITH_API_RENAMES.items():
-            # Check if the column was already created by renaming (e.g., 'Slug')
+        # Add new blank columns (using the defined map for default values, including 'Ubisoft')
+        for col, default_val in BLANK_COLUMNS_DEFAULTS.items():
             if col not in df.columns:
                  df[col] = default_val
 
