@@ -131,7 +131,7 @@ if st.button("Fetch Jobs"):
             'title': 'Name',
             'contractType': 'Type',
             'description': 'Description',
-            'cities': 'Location', 
+            'city': 'Location', 
             'jobFamily': 'Industry',
             'link': 'Apply URL' 
         }
@@ -188,4 +188,5 @@ if st.button("Fetch Jobs"):
 
     else:
         st.warning("No jobs found for the selected filters.")
+
 
