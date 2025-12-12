@@ -37,7 +37,7 @@ BLANK_COLUMNS_DEFAULTS = {
     "Updated On": '', 
     "Published On": '', 
     "CMS ID": '', 
-    "Company": 'Ubisoft', # <-- FIXED VALUE
+    "Company": 'Ubisoft', 
     "Salary Range": '', 
     "Access": '', 
     "Level": '', 
@@ -50,7 +50,7 @@ FILTERED_COLUMN_ORDER = [
     "Name", "Slug", "Collection ID", "Locale ID", "Item ID", "Archived", "Draft", 
     "Created On", "Updated On", "Published On", "CMS ID", "Company", "Type", 
     "Description", "Salary Range", "Access", "Location", "Industry", "Level", 
-    "Salary", "Deadline", "Apply URL"
+    "Salary", "Deadline", "Apply URL" # <--- CONFIRMING LAST POSITION
 ]
 
 
@@ -91,7 +91,6 @@ def fetch_jobs(country_code, keyword=None):
 def to_excel_bytes(df):
     from io import BytesIO
     output = BytesIO()
-    # Assuming 'xlsxwriter' is installed and working now!
     with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
         df.to_excel(writer, index=False, sheet_name='Jobs')
     processed_data = output.getvalue()
@@ -127,14 +126,14 @@ if st.button("Fetch Jobs"):
         df = pd.DataFrame(all_jobs)
 
         # 1. COLUMN MODIFICATIONS
-        # API Field Renaming Map (Corrected 'cities' to 'Location' and 'url' to 'Apply URL')
+        # API Field Renaming Map
         rename_map = {
             'title': 'Name',
             'contractType': 'Type',
             'description': 'Description',
             'cities': 'Location', 
             'jobFamily': 'Industry',
-            'url': 'Apply URL' # <-- CORRECTED
+            'url': 'Apply URL' 
         }
         
         # Apply Renaming
@@ -144,8 +143,10 @@ if st.button("Fetch Jobs"):
         if 'slug' in df.columns:
             df = df.drop(columns=['slug'])
 
-        # Add new blank columns (using the defined map for default values, including 'Ubisoft')
+        # Add new blank columns (using the defined map for default values)
         for col, default_val in BLANK_COLUMNS_DEFAULTS.items():
+            # Crucially, this ensures the 'Apply URL' from the API is NOT overwritten
+            # by a blank column if it has already been renamed from 'url'.
             if col not in df.columns:
                  df[col] = default_val
 
@@ -155,13 +156,14 @@ if st.button("Fetch Jobs"):
         # Display only key renamed columns for clean UI viewing
         display_columns = ['Name', 'Location', 'Industry', 'Type', 'Apply URL']
         
+        # Filter columns for display, ensuring 'Apply URL' is always tried
         df_display = df[[col for col in display_columns if col in df.columns]]
         st.dataframe(df_display)
         
         # --- DUAL DOWNLOAD BUTTONS ---
         
         # 4. FILTERED DATA DOWNLOAD: Select and order columns exactly as requested
-        # Ensure all columns exist before creating the filtered DF
+        # Ensure all columns exist and are ordered correctly
         filtered_cols_to_select = [col for col in FILTERED_COLUMN_ORDER if col in df.columns]
 
         df_filtered = df[filtered_cols_to_select]
