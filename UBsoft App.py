@@ -133,7 +133,7 @@ if st.button("Fetch Jobs"):
             'description': 'Description',
             'cities': 'Location', 
             'jobFamily': 'Industry',
-            'url': 'Apply URL' 
+            'link': 'Apply URL' 
         }
         
         # Apply Renaming
@@ -188,3 +188,4 @@ if st.button("Fetch Jobs"):
 
     else:
         st.warning("No jobs found for the selected filters.")
+
