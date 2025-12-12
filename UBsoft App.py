@@ -156,9 +156,9 @@ if st.button("Fetch Jobs"):
             'title': 'Name',
             'contractType': 'Type',
             'description': 'Description',
-            'cities': 'Location', 
+            'city': 'Location', 
             'jobFamily': 'Industry',
-            'url': 'Apply URL' 
+            'link': 'Apply URL' 
         }
         
         df = df.rename(columns=rename_map)
@@ -215,3 +215,4 @@ if st.button("Fetch Jobs"):
 
     else:
         st.warning("No jobs found for the selected filters.")
+
