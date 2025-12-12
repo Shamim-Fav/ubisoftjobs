@@ -25,9 +25,11 @@ AVAILABLE_COUNTRIES = [
     "ph", "es", "in", "br", "it", "sg", "us"
 ]
 
-# List of all new columns and their default values (with 'Company' fixed to 'Ubisoft')
+# Fixed Company Name
+FIXED_COMPANY_NAME = 'Ubisoft'
+
+# List of all new columns and their default values (EXCLUDING 'Slug' and 'Company' since they are calculated/fixed)
 BLANK_COLUMNS_DEFAULTS = {
-    "Slug": '', 
     "Collection ID": '', 
     "Locale ID": '', 
     "Item ID": '', 
@@ -37,7 +39,6 @@ BLANK_COLUMNS_DEFAULTS = {
     "Updated On": '', 
     "Published On": '', 
     "CMS ID": '', 
-    "Company": 'Ubisoft', 
     "Salary Range": '', 
     "Access": '', 
     "Level": '', 
@@ -50,11 +51,39 @@ FILTERED_COLUMN_ORDER = [
     "Name", "Slug", "Collection ID", "Locale ID", "Item ID", "Archived", "Draft", 
     "Created On", "Updated On", "Published On", "CMS ID", "Company", "Type", 
     "Description", "Salary Range", "Access", "Location", "Industry", "Level", 
-    "Salary", "Deadline", "Apply URL" # <--- CONFIRMING LAST POSITION
+    "Salary", "Deadline", "Apply URL"
 ]
 
 
 # ================== FUNCTIONS ==================
+
+# Helper function to generate the slug
+def generate_slug(row):
+    # 1. Company Name (Fixed)
+    company_part = FIXED_COMPANY_NAME
+    
+    # 2. Job Title (Name) - Take first two words
+    # Split the job title by space, take the first two elements, and join them
+    title_words = row['Name'].split()
+    title_part = ' '.join(title_words[:2])
+    
+    # 3. Location
+    location_part = str(row['Location'])
+    
+    # Combine the parts, convert to lowercase, and replace spaces/non-alphanumeric with hyphens
+    slug_parts = [company_part, title_part, location_part]
+    
+    # Clean up the parts for slug format (lowercase, replace non-word chars with hyphen)
+    
+    # A simple cleaning approach: replace spaces with hyphens, then remove multiple hyphens, then lowercase
+    full_slug = '-'.join(slug_parts)
+    
+    # Simple cleaner: convert to lowercase and replace sequences of non-alphanumeric chars with single hyphen
+    import re
+    cleaned_slug = re.sub(r'[^a-zA-Z0-9]+', '-', full_slug).strip('-').lower()
+    
+    return cleaned_slug
+
 def fetch_jobs(country_code, keyword=None):
     jobs = []
     page = 0
@@ -90,10 +119,9 @@ def fetch_jobs(country_code, keyword=None):
 # Function to convert DataFrame to Excel
 def to_excel_bytes(df):
     from io import BytesIO
-    output = BytesIO()
-    with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
+    with pd.ExcelWriter(BytesIO(), engine='xlsxwriter') as writer:
         df.to_excel(writer, index=False, sheet_name='Jobs')
-    processed_data = output.getvalue()
+        processed_data = writer.book.filename.getvalue() # Get value from BytesIO object used by ExcelWriter
     return processed_data
 
 # ================== STREAMLIT UI ==================
@@ -131,9 +159,9 @@ if st.button("Fetch Jobs"):
             'title': 'Name',
             'contractType': 'Type',
             'description': 'Description',
-            'city': 'Location', 
+            'cities': 'Location', 
             'jobFamily': 'Industry',
-            'link': 'Apply URL' 
+            'url': 'Apply URL' 
         }
         
         # Apply Renaming
@@ -143,27 +171,30 @@ if st.button("Fetch Jobs"):
         if 'slug' in df.columns:
             df = df.drop(columns=['slug'])
 
-        # Add new blank columns (using the defined map for default values)
+        # 2. CALCULATE and ADD NEW COLUMNS
+        
+        # Add FIXED 'Company' column
+        df['Company'] = FIXED_COMPANY_NAME
+        
+        # Add CALCULATED 'Slug' column
+        df['Slug'] = df.apply(generate_slug, axis=1)
+
+        # Add remaining BLANK columns
         for col, default_val in BLANK_COLUMNS_DEFAULTS.items():
-            # Crucially, this ensures the 'Apply URL' from the API is NOT overwritten
-            # by a blank column if it has already been renamed from 'url'.
             if col not in df.columns:
                  df[col] = default_val
 
         st.write(f"Total jobs fetched: {len(all_jobs)}")
         
         # --- STREAMLIT DISPLAY ---
-        # Display only key renamed columns for clean UI viewing
-        display_columns = ['Name', 'Location', 'Industry', 'Type', 'Apply URL']
+        display_columns = ['Name', 'Slug', 'Location', 'Industry', 'Type', 'Apply URL']
         
-        # Filter columns for display, ensuring 'Apply URL' is always tried
         df_display = df[[col for col in display_columns if col in df.columns]]
         st.dataframe(df_display)
         
         # --- DUAL DOWNLOAD BUTTONS ---
         
-        # 4. FILTERED DATA DOWNLOAD: Select and order columns exactly as requested
-        # Ensure all columns exist and are ordered correctly
+        # 3. FILTERED DATA DOWNLOAD: Select and order columns exactly as requested
         filtered_cols_to_select = [col for col in FILTERED_COLUMN_ORDER if col in df.columns]
 
         df_filtered = df[filtered_cols_to_select]
@@ -176,7 +207,7 @@ if st.button("Fetch Jobs"):
             mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
         )
         
-        # 5. FULL DATA DOWNLOAD
+        # 4. FULL DATA DOWNLOAD
         full_excel_data = to_excel_bytes(df)
         
         st.download_button(
@@ -188,5 +219,3 @@ if st.button("Fetch Jobs"):
 
     else:
         st.warning("No jobs found for the selected filters.")
-
-
